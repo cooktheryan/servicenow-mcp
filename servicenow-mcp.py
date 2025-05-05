@@ -341,10 +341,18 @@ class ServiceNowMCP:
         
     async def get_incident(self, number: str) -> str:
         """Get a specific incident by number"""
-        incident = await self.client.get_incident_by_number(number)
-        if incident:
-            return json.dumps({"result": incident}, indent=2)
-        return json.dumps({"result": "Incident not found"})
+        try:
+            # Always use get_incident_by_number to query by incident number, not get_record
+            incident = await self.client.get_incident_by_number(number)
+            if incident:
+                # Use the formatter for consistent output
+                return self._format_incident_record(incident)
+            else:
+                logger.error(f"No incident found with number: {number}")
+                return json.dumps({"error":{"message":"No Record found","detail":"Record doesn't exist or ACL restricts the record retrieval"},"status":"failure"}, indent=2)
+        except Exception as e:
+            logger.error(f"Error getting incident {number}: {str(e)}")
+            return json.dumps({"error":{"message":str(e),"detail":"Error occurred while retrieving the record"},"status":"failure"}, indent=2)
         
     async def list_users(self) -> str:
         """List users in ServiceNow"""
@@ -376,28 +384,123 @@ class ServiceNowMCP:
     
     # Tool handlers
     async def create_incident(self, 
-                     incident: IncidentCreate,
+                     incident,
                      ctx: Context = None) -> str:
         """
         Create a new incident in ServiceNow
         
         Args:
-            incident: The incident details to create
+            incident: The incident details to create - can be either an IncidentCreate object,
+                      a dictionary containing incident fields, or a string with the description
             ctx: Optional context object for progress reporting
         
         Returns:
-            JSON response from ServiceNow
+            JSON response from ServiceNow with human-readable formatting
         """
-        if ctx:
-            await ctx.info(f"Creating incident: {incident.short_description}")
-            
-        data = incident.dict(exclude_none=True)
-        result = await self.client.create_record("incident", data)
+        # Handle different input types
+        if isinstance(incident, str):
+            # If a string was provided, treat it as the description and generate a short description
+            short_desc = incident[:50] + ('...' if len(incident) > 50 else '')
+            incident_data = {
+                "short_description": short_desc,
+                "description": incident
+            }
+            logger.info(f"Creating incident from string description: {short_desc}")
+        elif isinstance(incident, dict):
+            # Dictionary provided
+            incident_data = incident
+            logger.info(f"Creating incident from dictionary: {incident.get('short_description', 'No short description')}")
+        elif isinstance(incident, IncidentCreate):
+            # IncidentCreate model provided
+            incident_data = incident.dict(exclude_none=True)
+            logger.info(f"Creating incident from IncidentCreate: {incident.short_description}")
+        else:
+            error_message = f"Invalid incident type: {type(incident)}. Expected IncidentCreate, dict, or str."
+            logger.error(error_message)
+            return json.dumps({"error": error_message})
+
+        # Validate that required fields are present
+        if "short_description" not in incident_data and isinstance(incident, dict):
+            if "description" in incident_data:
+                # Auto-generate short description from description
+                desc = incident_data["description"]
+                incident_data["short_description"] = desc[:50] + ('...' if len(desc) > 50 else '')
+            else:
+                incident_data["short_description"] = "Incident created through API"
         
+        if "description" not in incident_data and isinstance(incident, dict):
+            if "short_description" in incident_data:
+                incident_data["description"] = incident_data["short_description"]
+            else:
+                incident_data["description"] = "No description provided"
+    
+        # Log and create the incident
         if ctx:
-            await ctx.info(f"Created incident: {result['result']['number']}")
+            await ctx.info(f"Creating incident: {incident_data.get('short_description', 'No short description')}")
+        
+        try:
+            result = await self.client.create_record("incident", incident_data)
+            incident_result = result.get('result', {})
             
-        return json.dumps(result, indent=2)
+            # Create a human-readable response
+            incident_number = incident_result.get('number', 'Unknown')
+            description = incident_result.get('description', 'No description provided')
+            created_by = incident_result.get('sys_created_by', 'Unknown')
+            created_on = incident_result.get('sys_created_on', 'Unknown')
+            status = self._get_state_label(incident_result.get('state', 'Unknown'))
+            priority = incident_result.get('priority', 'Unknown')
+            impact = incident_result.get('impact', 'Unknown')
+            category = incident_result.get('category', 'Unknown') or 'Uncategorized'
+            assigned_to = incident_result.get('assigned_to', {}).get('display_value', 'Unassigned')
+            assignment_group = incident_result.get('assignment_group', {}).get('display_value', 'Unassigned')
+            
+            # Format priority and impact for readability
+            priority_map = {1: "1 (Critical)", 2: "2 (High)", 3: "3 (Moderate)", 4: "4 (Low)", 5: "5 (Planning)"}
+            impact_map = {1: "1 (High)", 2: "2 (Medium)", 3: "3 (Low)"}
+            
+            priority_str = priority_map.get(priority, str(priority))
+            impact_str = impact_map.get(impact, str(impact))
+            
+            # Build the human-readable response
+            human_readable = {
+                "message": f"The incident \"{incident_data.get('short_description', 'No short description')}\" has been created in ServiceNow with the following details:",
+                "details": {
+                    "incident_number": incident_number,
+                    "description": description,
+                    "created_by": created_by,
+                    "created_on": created_on,
+                    "status": status,
+                    "priority": priority_str,
+                    "impact": impact_str,
+                    "category": category,
+                    "assigned_to": assigned_to,
+                    "assignment_group": assignment_group
+                },
+                "raw_response": result
+            }
+            
+            if ctx:
+                await ctx.info(f"Created incident: {incident_number}")
+                
+            return json.dumps(human_readable, indent=2)
+        except Exception as e:
+            error_message = f"Error creating incident: {str(e)}"
+            logger.error(error_message)
+            if ctx:
+                await ctx.error(error_message)
+            return json.dumps({"error": error_message})
+            
+    def _get_state_label(self, state):
+        """Get a human-readable label for an incident state"""
+        state_map = {
+            "1": "New",
+            "2": "In Progress",
+            "3": "On Hold",
+            "6": "Resolved",
+            "7": "Closed",
+            "8": "Canceled"
+        }
+        return state_map.get(str(state), f"Unknown ({state})")
         
     async def update_incident(self,
                      number: str,
@@ -473,13 +576,88 @@ class ServiceNowMCP:
             ctx: Optional context object for progress reporting
             
         Returns:
-            JSON response containing the record
+            JSON response containing the record with human-readable formatting for incidents
         """
         if ctx:
             await ctx.info(f"Getting {table} record: {sys_id}")
+        
+        # Handle incident numbers passed directly
+        if table.lower() == "incident" and sys_id.upper().startswith("INC"):
+            try:
+                incident = await self.client.get_incident_by_number(sys_id)
+                if incident:
+                    return self._format_incident_record(incident)
+                else:
+                    return json.dumps({"error": f"Incident {sys_id} not found"}, indent=2)
+            except Exception as e:
+                return json.dumps({"error": f"Error retrieving incident: {str(e)}"}, indent=2)
             
-        result = await self.client.get_record(table, sys_id)
-        return json.dumps(result, indent=2)
+        try:    
+            result = await self.client.get_record(table, sys_id)
+            
+            # For incidents, provide a more human-readable format
+            if table.lower() == "incident" and "result" in result:
+                return self._format_incident_record(result["result"])
+            
+            return json.dumps(result, indent=2)
+        except Exception as e:
+            error_message = f"Error retrieving record: {str(e)}"
+            if ctx:
+                await ctx.error(error_message)
+            return json.dumps({"error": error_message}, indent=2)
+            
+    def _format_incident_record(self, incident):
+        """Format an incident record for human readability"""
+        # Extract key fields
+        incident_number = incident.get('number', 'Unknown')
+        short_description = incident.get('short_description', 'No short description')
+        description = incident.get('description', 'No description provided')
+        created_by = incident.get('sys_created_by', 'Unknown')
+        created_on = incident.get('sys_created_on', 'Unknown')
+        updated_on = incident.get('sys_updated_on', 'Unknown')
+        status = self._get_state_label(incident.get('state', 'Unknown'))
+        priority = incident.get('priority', 'Unknown')
+        impact = incident.get('impact', 'Unknown')
+        urgency = incident.get('urgency', 'Unknown')
+        category = incident.get('category', 'Unknown') or 'Uncategorized'
+        subcategory = incident.get('subcategory', 'Unknown') or 'Uncategorized'
+        assigned_to = incident.get('assigned_to', {}).get('display_value', 'Unassigned')
+        assignment_group = incident.get('assignment_group', {}).get('display_value', 'Unassigned')
+        caller = incident.get('caller_id', {}).get('display_value', 'Unknown')
+        
+        # Format priority, impact and urgency for readability
+        priority_map = {1: "1 (Critical)", 2: "2 (High)", 3: "3 (Moderate)", 4: "4 (Low)", 5: "5 (Planning)"}
+        impact_map = {1: "1 (High)", 2: "2 (Medium)", 3: "3 (Low)"}
+        urgency_map = {1: "1 (High)", 2: "2 (Medium)", 3: "3 (Low)"}
+        
+        priority_str = priority_map.get(priority, str(priority))
+        impact_str = impact_map.get(impact, str(impact))
+        urgency_str = urgency_map.get(urgency, str(urgency))
+        
+        # Build the human-readable response
+        human_readable = {
+            "message": f"Retrieved incident {incident_number}: {short_description}",
+            "details": {
+                "incident_number": incident_number,
+                "short_description": short_description,
+                "description": description,
+                "caller": caller,
+                "created_by": created_by,
+                "created_on": created_on,
+                "updated_on": updated_on,
+                "status": status,
+                "priority": priority_str,
+                "impact": impact_str,
+                "urgency": urgency_str,
+                "category": category,
+                "subcategory": subcategory,
+                "assigned_to": assigned_to,
+                "assignment_group": assignment_group
+            },
+            "raw_record": incident
+        }
+        
+        return json.dumps(human_readable, indent=2)
         
     async def perform_query(self,
                    table: str,

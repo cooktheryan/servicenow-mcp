@@ -19,8 +19,8 @@ A Model Context Protocol (MCP) server that interfaces with ServiceNow, allowing 
 ### Tools
 
 #### Basic Tools
-- `create_incident`: Create a new incident
-- `get_record`: Get a specific record by sys_id
+- `create_incident`: Create a new incident with human-readable formatted output
+- `get_record`: Get a specific record by sys_id with human-readable formatted output for incidents
 
 ## Installation
 
