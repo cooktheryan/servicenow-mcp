@@ -334,17 +334,17 @@ class ServiceNowMCP:
         
         # Register tools
         self.mcp.tool(name="create_incident")(self.create_incident)
-        self.mcp.tool(name="update_incident")(self.update_incident)
-        self.mcp.tool(name="search_records")(self.search_records)
+        # self.mcp.tool(name="update_incident")(self.update_incident)  # Disabled
+        # self.mcp.tool(name="search_records")(self.search_records)  # Disabled
         self.mcp.tool(name="get_record")(self.get_record)
-        self.mcp.tool(name="perform_query")(self.perform_query)
-        self.mcp.tool(name="add_comment")(self.add_comment)
-        self.mcp.tool(name="add_work_notes")(self.add_work_notes)
+        # self.mcp.tool(name="perform_query")(self.perform_query)  # Disabled
+        # self.mcp.tool(name="add_comment")(self.add_comment)  # Disabled
+        # self.mcp.tool(name="add_work_notes")(self.add_work_notes)  # Disabled
         
-        # Register natural language tools
-        self.mcp.tool(name="natural_language_search")(self.natural_language_search)
-        self.mcp.tool(name="natural_language_update")(self.natural_language_update)
-        self.mcp.tool(name="update_script")(self.update_script)
+        # Register natural language tools - all disabled
+        # self.mcp.tool(name="natural_language_search")(self.natural_language_search)  # Disabled
+        # self.mcp.tool(name="natural_language_update")(self.natural_language_update)  # Disabled
+        # self.mcp.tool(name="update_script")(self.update_script)  # Disabled
         
         # Register prompts
         self.mcp.prompt(name="analyze_incident")(self.incident_analysis_prompt)
