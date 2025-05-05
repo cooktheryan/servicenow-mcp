@@ -20,17 +20,7 @@ A Model Context Protocol (MCP) server that interfaces with ServiceNow, allowing 
 
 #### Basic Tools
 - `create_incident`: Create a new incident
-- `update_incident`: Update an existing incident
-- `search_records`: Search for records using text query
 - `get_record`: Get a specific record by sys_id
-- `perform_query`: Perform a query against ServiceNow
-- `add_comment`: Add a comment to an incident (customer visible)
-- `add_work_notes`: Add work notes to an incident (internal)
-
-#### Natural Language Tools
-- `natural_language_search`: Search for records using natural language (e.g., "find all incidents about SAP")
-- `natural_language_update`: Update records using natural language (e.g., "Update incident INC0010001 saying I'm working on it")
-- `update_script`: Update ServiceNow script files (script includes, business rules, etc.)
 
 ## Installation
 
@@ -92,36 +82,24 @@ To use this MCP server with Cline, add the following to your MCP settings file:
 
 **Note:** Make sure to use the full path to the Python executable that has the `mcp-server-servicenow` package installed.
 
-## Natural Language Examples
+## Usage Examples
 
-### Searching Records
+### Creating Incidents
 
-You can search for records using natural language queries:
-
-```
-find all incidents about email
-search for incidents related to network issues
-show me all incidents with high priority
-```
-
-### Updating Records
-
-You can update records using natural language commands:
+You can create new incidents:
 
 ```
-Update incident INC0010001 saying I'm working on it
-Set incident INC0010002 to in progress
-Close incident INC0010003 with resolution: fixed the issue
+Create a new incident with a description of "Server is down"
+Create incident with short description "Email not working" and description "User cannot send emails"
 ```
 
-### Managing Scripts
+### Getting Records
 
-You can update ServiceNow scripts from local files:
+You can retrieve specific records:
 
 ```
-Update the ServiceNow script include "HelloWorld" with the contents of hello_world.js
-Upload utils.js to ServiceNow as a script include named "UtilityFunctions"
-Update @form_validation.js, it's a client script called "FormValidation"
+Get incident INC0010001
+Get record sys_user 5f7c2a374f510300a9a95144836d4324
 ```
 
 ## Authentication Methods
