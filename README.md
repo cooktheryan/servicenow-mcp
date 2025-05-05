@@ -86,12 +86,24 @@ To use this MCP server with Cline, add the following to your MCP settings file:
 
 ### Creating Incidents
 
-You can create new incidents:
+To create a new incident, use the `create_incident` tool with a dictionary containing at least the required fields:
 
 ```
-Create a new incident with a description of "Server is down"
-Create incident with short description "Email not working" and description "User cannot send emails"
+# Create an incident with the required fields
+create_incident(incident={"short_description": "Email service is down", "description": "Users are unable to send or receive emails."})
+
+# Create an incident with additional fields
+create_incident(incident={
+  "short_description": "Network outage", 
+  "description": "The network is down in the east wing offices.", 
+  "category": "Network", 
+  "subcategory": "LAN",
+  "impact": 1,  # High impact
+  "urgency": 1  # High urgency
+})
 ```
+
+Note: Previously, string inputs were supported but have been removed to ensure consistent behavior.
 
 ### Getting Records
 

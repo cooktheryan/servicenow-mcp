@@ -409,24 +409,15 @@ class ServiceNowMCP:
         Create a new incident in ServiceNow
         
         Args:
-            incident: The incident details to create - can be either an IncidentCreate object,
-                      a dictionary containing incident fields, or a string with the description
+            incident: The incident details to create - must be a dictionary containing incident fields
+                     with at least short_description and description
             ctx: Optional context object for progress reporting
         
         Returns:
             JSON response from ServiceNow with human-readable formatting
         """
-        # Handle different input types
-        if isinstance(incident, str):
-            # If a string was provided, treat it as the description and generate a short description
-            short_desc = incident[:50] + ('...' if len(incident) > 50 else '')
-            incident_data = {
-                "short_description": short_desc,
-                "description": incident
-            }
-            logger.info(f"Creating incident from string description: {short_desc}")
-        elif isinstance(incident, dict):
-            # Dictionary provided
+        # Handle input - ensure it's a dictionary
+        if isinstance(incident, dict):
             incident_data = incident
             logger.info(f"Creating incident from dictionary: {incident.get('short_description', 'No short description')}")
         elif isinstance(incident, IncidentCreate):
@@ -434,12 +425,12 @@ class ServiceNowMCP:
             incident_data = incident.dict(exclude_none=True)
             logger.info(f"Creating incident from IncidentCreate: {incident.short_description}")
         else:
-            error_message = f"Invalid incident type: {type(incident)}. Expected IncidentCreate, dict, or str."
+            error_message = f"Invalid incident type: {type(incident)}. Expected dictionary or IncidentCreate."
             logger.error(error_message)
-            return json.dumps({"error": error_message})
+            return json.dumps({"error": error_message}, indent=2)
 
         # Validate that required fields are present
-        if "short_description" not in incident_data and isinstance(incident, dict):
+        if "short_description" not in incident_data:
             if "description" in incident_data:
                 # Auto-generate short description from description
                 desc = incident_data["description"]
@@ -447,7 +438,7 @@ class ServiceNowMCP:
             else:
                 incident_data["short_description"] = "Incident created through API"
         
-        if "description" not in incident_data and isinstance(incident, dict):
+        if "description" not in incident_data:
             if "short_description" in incident_data:
                 incident_data["description"] = incident_data["short_description"]
             else:
@@ -507,7 +498,7 @@ class ServiceNowMCP:
             logger.error(error_message)
             if ctx:
                 await ctx.error(error_message)
-            return json.dumps({"error": error_message})
+            return json.dumps({"error": error_message}, indent=2)
             
     def _get_state_label(self, state):
         """Get a human-readable label for an incident state"""
